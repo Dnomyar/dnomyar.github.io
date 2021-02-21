@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title>Damien Raymond - The "fundamental architecture in computer science"</title>
+        <link rel="stylesheet" type="text/css" href="../css/default.css" />
+        <link rel="stylesheet" type="text/css" href="../css/pendoc.css" />
+    </head>
+    <body>
+        <div id="header">
+            <div id="logo">
+                <a href="../">Damien Raymond</a>
+            </div>
+            <div id="navigation">
+                <a href="../">Home</a>
+                <a href="../about.html">About</a>
+                <a href="../contact.html">Contact</a>
+                <a href="../archive.html">Archive</a>
+            </div>
+        </div>
+
+        <div id="content">
+            <h1>The "fundamental architecture in computer science"</h1>
+
+            <div class="info">
+    Posted on February 21, 2021
+    
+</div>
+
+<p>As I get more experienced with writing code and testing it, I realize that I use a technique that I find really valuable. I believe that any developer would benefit about knowing it and using it.</p>
+<p>The fundamental idea is that all the code that we write belong to different “categories”: <em>domain</em>, <em>infrastructure</em> and <em>application</em>. Separating those concerns make the developer job way easier.</p>
+<p>This idea of separating <em>domain</em> and <em>infrastructure</em> concepts is at the foundation of the <em>Hexagonal Architecture</em> aka <em>Ports and Adapters</em>.</p>
+<p>In this article, I will not talk about <em>Hexagonal Architecture</em> or <em>Ports and Adapters</em> specifically. I will rather discuss underlying concepts, why those architectures are useful, what are its principles and present a concrete implementation.</p>
+<h2 id="business-logic-to-be-or-not-to-be">Business logic: To be or not to be</h2>
+<p>The business logic describes the problem that the software is trying to solve. For instance, when creating a train booking software, the business logic would include the representation of the train, seats, passengers along with the logic of booking a seat.</p>
+<p>Often, the business logic uses the same vocabulary as the domain expert. A domain expert is someone specialized in the domain or the problem that you are solving with the software also known as Product Owner. You might have heard this vocabulary being called the <a href="https://martinfowler.com/bliki/UbiquitousLanguage.html">Ubiquitous Language</a>.</p>
+<p>For the train example above, you can think that a domain expert would talk about passengers, seats, cars and train. These concerns belong to <em>domain</em>. On the contrary, domain experts would probably not talk about databases, message queues or REST APIs. These concerns belong to <em>infrastructure</em>.</p>
+<p>The business logic by itself not really useful. The application needs to be able to communicate to the user or other applications and to “remember” things. That’s where tools like databases, message queues or REST APIs comes useful.</p>
+<h2 id="the-golden-rule">The golden rule</h2>
+<p>Once <em>domain</em> and <em>infrastructure</em> categories are identified, the actual code can be separated out physically (in different packages or modules) respecting the following (golden) rule: <strong>the domain should not depend on the infrastructure</strong>. In other words, the domain should have no knowledge and no reference about databases, messages queues or REST APIs.</p>
+<p>There are few very good reasons for this rule to exist.</p>
+<p>First, the <em>domain</em> <em>should be</em> the most valuable piece of the software. The domain should be as free as possible to change in order to adapt to a competitive market. The least constrained the <em>domain</em> is, the freest it is to change, the quicker the value can be brought to customers.</p>
+<p>Secondly, testing become way easier. Testing is fundamental help (1) bringing consistent values to customers and (2) to give software the best chances to evolve over the time. Earlier, we mentioned that <em>domain</em> code is where the value of the software resides. In other words, that is the part of the software to get right and making sure it stays right. Hence, be heavily tested.</p>
+<p>Separating <em>domain</em> and <em>infrastructure</em> concerns facilitates testing. Indeed, requiring no reference to <em>infrastructure</em> concepts to write domain tests simplifies the process significantly. Concretely, you don’t have to think about mocking the database because you don’t need to.</p>
+<h2 id="dependency-inversion-principle">Dependency inversion principle</h2>
+<p>When I was first introduced to the concept, I remember asking myself: “if I can’t have any reference of the database in the domain, how do I save the entity?”</p>
+<p>That’s where the dependency inversion principle comes handy. You probably already heard about this concept, it is the “D” of SOLID. The idea is to interact with an interface rather than the actual implementation.</p>
+<p>Concretely, as the <em>golden rule</em> does not allow any reference to database, the domain code uses an interface (known as <em>Port</em>). The implementation (known as <em>Adapter</em>) would be in the infrastructure layer. That way, the rule is not broken.</p>
+<h2 id="concrete-example-registration-of-a-user">Concrete example: registration of a user</h2>
+<p>Let’s take a simple example to illustrate. Imagine you are asked to implement to book a seat for a passenger in a train. The rules are:</p>
+<ul>
+<li>seats are identified by the car id and the seat number;</li>
+<li>you should check that the seat is not already booked in the database. If not, then book it for the passenger requesting it.</li>
+</ul>
+<blockquote>
+<p>For simplification purposes, we imagine that there is only one train.</p>
+</blockquote>
+<p>Take a few minutes to imagine how would you implement that. Keep in mind to separate the domain and the infrastructure layers.</p>
+<blockquote>
+<p>For this article, I am going to use Scala but this can be applied for any language allowing dependency inversion principle.</p>
+</blockquote>
+<h3 id="domain-layer">Domain layer</h3>
+<p>First, the domain model:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode scala"><code class="sourceCode scala"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true"></a><span class="kw">package</span> domain.<span class="fu">model</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true"></a><span class="co">// The entity to be saved is SeatBooked</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true"></a><span class="co">// It can also be called the &quot;aggregate root&quot;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true"></a><span class="kw">case</span> <span class="kw">class</span> <span class="fu">SeatBooked</span>(seat: Seat, customer: Customer)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true"></a><span class="co">// Seat is the &quot;id&quot; of SeatBooked</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true"></a><span class="kw">case</span> <span class="kw">class</span> <span class="fu">Seat</span>(carId: String, seatNumber: Int)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true"></a><span class="co">// Illustrative implementation of a Customer </span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true"></a><span class="kw">case</span> <span class="kw">class</span> <span class="fu">Customer</span>(name: String)</span></code></pre></div>
+<p>And then the function signature to implement:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode scala"><code class="sourceCode scala"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true"></a><span class="kw">package</span> domain</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true"></a><span class="kw">class</span> SeatReservationService {</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true"></a>  <span class="kw">def</span> <span class="fu">book</span>(seat: Seat, customer: Customer): Unit = ???</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true"></a>}     </span></code></pre></div>
+<p>Now, the repository. Following, the <em>dependency inversion principle</em>, let’s start by the interface:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode scala"><code class="sourceCode scala"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true"></a><span class="kw">package</span> domain</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true"></a><span class="kw">trait</span> BookedSeatRepository {</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true"></a>  <span class="kw">def</span> <span class="fu">find</span>(seat: Seat): Option[SeatBooked] </span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true"></a>  <span class="co">// ^^^ The `Option` here expresses that there might </span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true"></a>  <span class="co">// or might not be any `SeatBooked` returned</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true"></a>  <span class="co">// by this function</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true"></a>  <span class="kw">def</span> <span class="fu">save</span>(seatBooked: SeatBooked): Unit</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true"></a>}</span></code></pre></div>
+<p>Usually, a simple interface like this example covers most use cases.</p>
+<blockquote>
+<p>One important thing to keep in mind is that the interface is gong to reside in the domain package. As a consequence, it can have no knowledge about the code related to the database.</p>
+</blockquote>
+<p>No need to implement the repository to create the business logic of the function register:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode scala"><code class="sourceCode scala"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true"></a><span class="kw">package</span> domain</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true"></a><span class="kw">class</span> <span class="fu">SeatReservationService</span>(bookedSeatRepository: BookedSeatRepository) {</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true"></a>  <span class="kw">def</span> <span class="fu">book</span>(seat: Seat, customer: Customer): Unit = {</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true"></a>    <span class="kw">val</span> seatBooked = </span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true"></a>      bookedSeatRepository.<span class="fu">find</span>(seat).<span class="fu">isDefined</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true"></a>    <span class="kw">if</span>(! seatBooked){</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true"></a>      bookedSeatRepository.<span class="fu">save</span>(</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true"></a>        <span class="fu">SeatBooked</span>(seat, customer)</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true"></a>      )</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true"></a>    }</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true"></a>  }    </span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true"></a>} </span></code></pre></div>
+<blockquote>
+<p>I’d like to emphase, how easy it is to test the business logic. Actually, there is no need to have a database configured in the project at all. For instance, the <code>BookedSeatRepository</code> can be mocked or implemented in-memory using a <code>Map[Seat, Customer]</code>. That would be enough to test the business logic.</p>
+</blockquote>
+<h3 id="infrastructure-layer">Infrastructure layer</h3>
+<p>Finally, the implementation of the booked repository in the infrastructure layer.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode scala"><code class="sourceCode scala"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true"></a><span class="kw">package</span> implementation</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true"></a></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true"></a><span class="kw">class</span> BookedSeatRepositoryPostgres </span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true"></a>  <span class="kw">extends</span> BookedSeatRepository {</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true"></a></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true"></a>  <span class="kw">def</span> <span class="fu">find</span>(seat: Seat): Option[SeatBooked] = ???</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true"></a>  <span class="kw">def</span> <span class="fu">save</span>(seatBooked: SeatBooked): Unit = ???</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true"></a>}   </span></code></pre></div>
+<p>I chose to use Postgres here as an example but you could imagine any other technology.</p>
+<blockquote>
+<p>Note: I used <code>???</code> as the actual implementation is beside the point.</p>
+</blockquote>
+<blockquote>
+<p>This architecture allows you to have several implementations. For instance, having an in-memory implementation is very useful for integration tests (for instance, business end-to-end tests <em>à la</em> BBD).</p>
+</blockquote>
+<h3 id="application-layer">Application layer</h3>
+<p>There is one more layer that I haven’t introduced yet: the <em>application</em> layer. Typically, the <em>application</em> layer contains the “main” function (executed when the application is launched). This layer has the responsibility to initialize <em>infrastructure</em> classes and pass them to the <em>domain</em>.</p>
+<blockquote>
+<p>In some languages (like PHP), there is no “main” function. The way applications run is different from JVM based applications for instance. As such, the section is slightly less relevant. But the rest is :).</p>
+</blockquote>
+<p>Other layers (<em>domain</em> and <em>infrastructure</em>) have no knowledge about the <em>application</em> layer. Here is a dependency diagram to illustrate: <img alt="Screenshot 2021-02-15 at 19 48 49" src="https://user-images.githubusercontent.com/4415022/107989728-c68ae380-6fca-11eb-9b33-f5096b8a6583.png"></p>
+<p>For our example, the application layer would contain only the main class:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode scala"><code class="sourceCode scala"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true"></a><span class="kw">package</span> application</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true"></a><span class="kw">object</span> Main {</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true"></a>  <span class="kw">def</span> <span class="fu">main</span>(args: Array[String]): Unit = {</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true"></a>    <span class="co">// instanciation of classes</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true"></a>    <span class="kw">val</span> bookedSeatRepository: BookedSeatRepository = </span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true"></a>      <span class="kw">new</span> <span class="fu">BookedSeatRepositoryPostgres</span>()</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true"></a>    <span class="kw">val</span> seatReservationService = </span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true"></a>      <span class="kw">new</span> <span class="fu">SeatReservationService</span>(bookedSeatRepository)</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true"></a>  </span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true"></a>    <span class="co">// calling the service to register the user</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true"></a>    <span class="kw">val</span> seat = <span class="fu">Seat</span>(<span class="st">&quot;A&quot;</span>, <span class="dv">14</span>)</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true"></a>    <span class="kw">val</span> customer = <span class="fu">Customer</span>(<span class="st">&quot;Damien&quot;</span>)</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true"></a>    seatReservationService.<span class="fu">book</span>(seat, customer) </span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true"></a>  }</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true"></a>}  </span></code></pre></div>
+<p>For the moment, the application is not really useful as no http service is calling method <code>book</code> (the point is is to illustrate).</p>
+<h3 id="wrapping-up">Wrapping up</h3>
+<p>Overall, its roughly looks like that: <img src="https://user-images.githubusercontent.com/4415022/108123660-1dadb880-709e-11eb-931c-16eeff604510.png" alt="Screenshot 2021-02-16 at 21 29 34" /></p>
+<p>If you look at the direction of the arrows, you can the that the rule is respected.</p>
+<h2 id="challenges-of-implementing-this-pattern">Challenges of implementing this pattern</h2>
+<p>I remember, when I started using this architecture, I faced several challenges.</p>
+<h3 id="where-to-put-what">Where to put what?</h3>
+<p>Beginners of this pattern might have trouble figuring out the <em>right</em> boundaries of each layer.</p>
+<p>It can be putting a class (or the concern) in the wrong layer. For instance, I don’t think that the configuration related code should be in <em>infrastructure</em> but rather in <em>application</em>. It is an <em>application</em> related concern. It only matters when the application is running. Therefore, putting it in the <em>domain</em> or <em>infrastructure</em> layer would be less relevant.</p>
+<p>Sometimes, a more subtile error can happen: the concern is in the <em>right</em> layer but some classes are passed on to another layer. This is known as a “leak”. For instance, an infrastructure concern is passed on to the domain. Typically, it happens when the response class of the http service is returned by accident to the domain. This can also happen in the case of a Web Server when the http request class would be passed on to the domain as a parameter. In that case, the golden rule is not respected.</p>
+<p>My advise is to ask yourself for each class (or each responsibility) in which layer it belongs.</p>
+<h3 id="frameworks">Frameworks</h3>
+<p>Users of frameworks can be a bit confused when it comes to fit this pattern with the framework conventions. A tip is to consider that framework are part of external layers like <em>application</em> or <em>infrastructure</em>. As such, try to keep the framework code as far away from the domain as possible.</p>
+<p>Actually integrating this pattern in a framework can be difficult. Frameworks can be quite invasive. I believe most modern frameworks can be configured to fit the requirement of the architecture.</p>
+<p>Otherwise, having a set of libraries over a framework allows a greater flexibility in order to put the concerns in <em>right</em> layer</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>In this article, we saw we can improve the code we write by:</p>
+<ul>
+<li><strong>identifying the code belonging to those 3 categories: <em>domain</em>, <em>infrastructure</em> and <em>application</em>;</strong></li>
+<li>separating it out the code physically (i.e. in different packages or modules);</li>
+<li>respecting the golden rule: <strong>the domain should not depend on the infrastructure</strong>.</li>
+</ul>
+<p>The dependency inversion principle is a cornerstone to implement this architecture.</p>
+<p>Event though, implementing this architecture can be challenging, it has multiple benefits:</p>
+<ul>
+<li>It allows to focus on the business model, the most valuable piece of the software. This leads to more values being brought to the customer quicker.</li>
+<li>Testing becomes much easier. In particular, it allows to focus the testing effort on what matters, the domain.</li>
+<li>I find easier to reason about the software when concerns are well separated into those different layers.</li>
+</ul>
+<hr />
+<blockquote>
+<p>I’d like to thanks Arnaud LEMAIRE and Thomas PIERRAIN for sharing those ideas. I really encourage you to read and watch their articles and conferences (in French).</p>
+</blockquote>
+<blockquote>
+<p>Thanks to Anaël, Amanda and Clément for their insightful advises and proof-reading the article.</p>
+</blockquote>
+
+        </div>
+        <div id="footer">
+            Site proudly generated by
+            <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </div>
+    </body>
+</html>
