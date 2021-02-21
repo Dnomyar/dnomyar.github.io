@@ -14,6 +14,10 @@ main = hakyll $ do
     match "css/*" $ do
         route   idRoute
         compile compressCssCompiler
+    
+    match "fonts/*" $ do
+        route   idRoute
+        compile copyFileCompiler
 
     match (fromList ["about.rst", "contact.markdown"]) $ do
         route   $ setExtension "html"
